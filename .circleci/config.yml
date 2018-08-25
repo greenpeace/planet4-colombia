@@ -29,11 +29,24 @@ job_descriptions:
       - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
 
 jobs:
-  build:
+  build-branch:
     <<: *defaults
     environment:
-      TYPE: "Container Build - planet4-colombia-x"
+      GOOGLE_PROJECT_ID: planet-4-151612
     <<: *build_steps
+
+  build-release:
+    <<: *defaults
+    environment:
+      GOOGLE_PROJECT_ID: planet4-production
+    <<: *build_steps
+
+  build-tag:
+    <<: *defaults
+    environment:
+      GOOGLE_PROJECT_ID: planet4-production
+    <<: *build_steps
+
 
   deploy-develop:
     <<: *defaults
@@ -88,7 +101,7 @@ workflows:
   version: 2
   develop:
     jobs:
-    - build:
+    - build-branch:
         context: org-global
         filters:
           branches:
@@ -96,14 +109,14 @@ workflows:
     - deploy-develop:
         context: org-global
         requires:
-          - build
+          - build-branch
         filters:
           branches:
             only: develop
 
   release:
     jobs:
-    - build:
+    - build-release:
         context: org-global
         filters:
           branches:
@@ -111,13 +124,13 @@ workflows:
     - deploy-release:
         context: org-global
         requires:
-          - build
+          - build-release
         filters:
           branches:
             only: /^release.*/
   tag:
     jobs:
-      - build:
+      - build-tag:
           context: org-global
           filters:
             branches:
@@ -132,7 +145,7 @@ workflows:
             tags:
               only: /^v.*/
           requires:
-            - build
+            - build-tag
       - deploy-tag:
           context: org-global
           requires:
