@@ -72,7 +72,8 @@ job_descriptions:
       - run: release-start.sh $(cat /tmp/workspace/var/new_release)
       - run: release-start.sh $(cat /tmp/workspace/var/new_release) || git checkout feature/$(cat /tmp/workspace/var/new_release)
       - run: mv composer-local.json /tmp/workspace
-      - run: < /tmp/workspace/composer-local.json jq 'del(.require)' > composer-local.json
+      - run: jq 'del(.require)' /tmp/workspace/composer-local.json > /tmp/workspace/composer-local-1.json
+      - run: jq ".version=\"$(cat /tmp/workspace/var/new_release)\"" /tmp/workspace/composer-local-1.json > composer-local.json
       - run: composer validate composer-local.json
       - run: git add .
       - run:
