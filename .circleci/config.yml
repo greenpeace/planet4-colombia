@@ -1,11 +1,46 @@
-defaults: &defaults
-  environment:
+version: 2
 
+defaults: &defaults
   docker:
     - image: gcr.io/planet-4-151612/p4-builder:latest
   working_directory:  /home/circleci
 
-version: 2
+job_environments:
+  common_environment: &common_environment
+    CONTAINER_PREFIX: planet4-colombia
+    APP_HOSTPATH: colombia
+  develop_environment: &develop_environment
+    APP_ENVIRONMENT: development
+    APP_HOSTNAME: k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: p4-develop-k8s
+    GOOGLE_PROJECT_ID: planet-4-151612
+    GOOGLE_PROJECT_ID: planet-4-151612
+    HELM_NAMESPACE: develop
+    NEWRELIC_APPNAME: P4 Colombia Development
+    WP_DB_NAME: planet4-colombia_wordpress_develop
+    WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+  release_environment: &release_environment
+    APP_ENVIRONMENT: staging
+    APP_HOSTNAME: release.k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: planet4-prod
+    CONTAINER_PREFIX: planet4-colombia
+    GCLOUD_CLUSTER: planet4-production
+    GOOGLE_PROJECT_ID: planet4-production
+    HELM_RELEASE: planet4-colombia-release
+    NEWRELIC_APPNAME: P4 Colombia Release
+    WP_DB_NAME: planet4-colombia_wordpress_release
+    WP_STATELESS_BUCKET: planet4-colombia-stateless-release
+  production_environment: &production_environment
+    APP_HOSTNAME: master.k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: planet4-prod
+    GCLOUD_CLUSTER: planet4-production
+    GOOGLE_PROJECT_ID: planet4-production
+    HELM_NAMESPACE: colombia
+    HELM_RELEASE: planet4-colombia-master
+    MIN_REPLICA_COUNT: 2
+    NEWRELIC_APPNAME: P4 Colombia Production
+    WP_DB_NAME: planet4-colombia_wordpress_master
+    WP_STATELESS_BUCKET: planet4-colombia-stateless
 
 job_descriptions:
   build_steps: &build_steps
@@ -34,72 +69,43 @@ jobs:
   build-branch:
     <<: *defaults
     environment:
-      GOOGLE_PROJECT_ID: planet-4-151612
-      CONTAINER_PREFIX: planet4-colombia
+      <<: *common_environment
+      <<: *develop_environment
     <<: *build_steps
 
   build-release:
     <<: *defaults
     environment:
-      GOOGLE_PROJECT_ID: planet4-production
-      CONTAINER_PREFIX: planet4-colombia
+      <<: *common_environment
+      <<: *release_environment
     <<: *build_steps
 
   build-tag:
     <<: *defaults
     environment:
-      GOOGLE_PROJECT_ID: planet4-production
-      CONTAINER_PREFIX: planet4-colombia
+      <<: *common_environment
+      <<: *production_environment
     <<: *build_steps
-
 
   deploy-develop:
     <<: *defaults
     environment:
-      APP_ENVIRONMENT: development
-      APP_HOSTNAME: k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: p4-develop-k8s
-      CONTAINER_PREFIX: planet4-colombia
-      GOOGLE_PROJECT_ID: planet-4-151612
-      HELM_NAMESPACE: develop
-      NEWRELIC_APPNAME: P4 Colombia Development
-      WP_DB_NAME: planet4-colombia_wordpress_develop
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+      <<: *common_environment
+      <<: *develop_environment
     <<: *deploy_steps
 
   deploy-release:
     <<: *defaults
     environment:
-      APP_ENVIRONMENT: staging
-      APP_HOSTNAME: release.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-release
-      NEWRELIC_APPNAME: P4 Colombia Release
-      WP_DB_NAME: planet4-colombia_wordpress_release
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-release
+      <<: *common_environment
+      <<: *release_environment
     <<: *deploy_steps
 
   deploy-tag:
     <<: *defaults
     environment:
-      APP_HOSTNAME: master.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-master
-      MIN_REPLICA_COUNT: 2
-      NEWRELIC_APPNAME: P4 Colombia Production
-      WP_DB_NAME: planet4-colombia_wordpress_master
-      WP_STATELESS_BUCKET: planet4-colombia-stateless
+      <<: *common_environment
+      <<: *production_environment
     <<: *deploy_steps
 
 workflows:
@@ -118,7 +124,6 @@ workflows:
         filters:
           branches:
             only: develop
-
   release:
     jobs:
     - build-release:
