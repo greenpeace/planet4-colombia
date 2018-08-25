@@ -67,9 +67,8 @@ job_descriptions:
       - checkout
       - attach_workspace:
           at: /tmp/workspace
-      - run: git-current-tag.sh > /tmp/workspace/var/old_release
-      - run: increment-version.sh $(cat /tmp/workspace/var/old_release) > /tmp/workspace/var/new_release
-      - run: release-start.sh $(cat /tmp/workspace/var/new_release)
+      - run: git-current-tag.sh | tee /tmp/workspace/var/old_release
+      - run: increment-version.sh $(cat /tmp/workspace/var/old_release) | tee /tmp/workspace/var/new_release
       - run: release-start.sh $(cat /tmp/workspace/var/new_release) || git checkout feature/$(cat /tmp/workspace/var/new_release)
       - run: mv composer-local.json /tmp/workspace
       - run: jq 'del(.require)' /tmp/workspace/composer-local.json > /tmp/workspace/composer-local-1.json
