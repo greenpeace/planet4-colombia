@@ -48,6 +48,7 @@ job_descriptions:
       - setup_remote_docker
       - run: activate-gcloud-account.sh
       - run: mkdir -p /tmp/workspace/var
+      - run: mkdir -p /tmp/workspace/src
       - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
       - run: make
       - run:
@@ -58,6 +59,30 @@ job_descriptions:
           root: /tmp/workspace
           paths:
             - var
+            - src
+
+  prepare_release: &prepare_release
+    working_directory: /tmp/workspace/src
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - run: |
+          current_version=$(git-current-tag.sh)
+          echo "Found existing tag: $current_version"
+
+          new_version=$(increment-version.sh $current_version)
+          echo "Promoting branch ${CIRCLE_BRANCH} to ${new_version}"
+
+          jq . < composer.json
+
+          exit 1
+          # release-start.sh $new_version
+          #
+          # 
+          #
+          # release-finish.sh $new_version
+
   deploy_steps: &deploy_steps
     steps:
       - attach_workspace:
@@ -72,6 +97,10 @@ jobs:
       <<: *common_environment
       <<: *develop_environment
     <<: *build_steps
+
+  prepare-release:
+    <<: *defaults
+    <<: *prepare_release
 
   build-release:
     <<: *defaults
@@ -121,6 +150,13 @@ workflows:
         context: org-global
         requires:
           - build-branch
+        filters:
+          branches:
+            only: develop
+    - prepare-release:
+        context: org-global
+        requires:
+          - deploy-develop
         filters:
           branches:
             only: develop
