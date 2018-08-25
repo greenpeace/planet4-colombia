@@ -67,21 +67,39 @@ job_descriptions:
       - checkout
       - attach_workspace:
           at: /tmp/workspace
-      - run: |
-          current_version=$(git-current-tag.sh)
-          echo "Found existing tag: $current_version"
+      - run: git-current-tag.sh > /tmp/workspace/var/old_release
+      - run: increment-version.sh $(cat /tmp/workspace/var/old_release) > /tmp/workspace/var/new_release
+      - run: release-start.sh $(cat /tmp/workspace/var/new_release)
+      - run: cat composer-local.json | jq 'del(.require)' > composer-local.json
+      - run: composer validate composer-local.json
+      - run: git add .
+      - run:
+          name: git commit
+          command: |
+            git commit -m ":robot: Release $(cat /tmp/workspace/var/new_release)"
+      - run: git push origin feature/$(cat /tmp/workspace/var/new_release)
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - var
+            - src
 
-          new_version=$(increment-version.sh $current_version)
-          echo "Promoting branch ${CIRCLE_BRANCH} to ${new_version}"
+  notify_promote: &notify_promote
+    working_directory: /tmp/workspace/src
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - checkout
+      - run: TYPE="@rawalker Promote Release $(cat /tmp/workspace/var/new_release)" notify-job-hold.sh
 
-          jq . < composer.json
-
-          exit 1
-          # release-start.sh $new_version
-          #
-          # 
-          #
-          # release-finish.sh $new_version
+  finish_release: &finish_release
+    working_directory: /tmp/workspace/src
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - checkout
+      - run: release-finish.sh $(cat /tmp/workspace/var/new_release)
+      - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release)
 
   deploy_steps: &deploy_steps
     steps:
@@ -102,12 +120,20 @@ jobs:
     <<: *defaults
     <<: *prepare_release
 
+  notify-promote:
+    <<: *defaults
+    <<: *notify_promote
+
   build-release:
     <<: *defaults
     environment:
       <<: *common_environment
       <<: *release_environment
     <<: *build_steps
+
+  finish-release:
+    <<: *defaults
+    <<: *finish_release
 
   build-tag:
     <<: *defaults
@@ -160,6 +186,7 @@ workflows:
         filters:
           branches:
             only: develop
+
   release:
     jobs:
     - build-release:
@@ -171,6 +198,28 @@ workflows:
         context: org-global
         requires:
           - build-release
+        filters:
+          branches:
+            only: /^release.*/
+    - notify-promote:
+        context: org-global
+        requires:
+          - deploy-release
+        filters:
+          branches:
+            only: /^release.*/
+    - hold-promote:
+        type: approval
+        requires:
+          - deploy-release
+        filters:
+          branches:
+            only: /^release.*/
+    - finish-release:
+        context: org-global
+        requires:
+          - hold-promote
+          - notify-promote
         filters:
           branches:
             only: /^release.*/
