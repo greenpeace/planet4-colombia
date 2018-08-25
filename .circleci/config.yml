@@ -78,7 +78,7 @@ job_descriptions:
       - run:
           name: git commit
           command: |
-            git commit -m --allow-empty ":robot: Release $(cat /tmp/workspace/var/new_release)"
+            git commit --allow-empty -m ":robot: Release $(cat /tmp/workspace/var/new_release)"
       - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release) || exit 0
       - run: git push -u origin release/$(cat /tmp/workspace/var/new_release)
       - run:
