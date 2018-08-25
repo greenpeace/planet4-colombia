@@ -1,24 +1,12 @@
 defaults: &defaults
   docker:
     - image: gcr.io/planet-4-151612/p4-builder:latest
-  working_directory:  /home/circleci/
+  working_directory:  /home/circleci/project
 
 version: 2
 
-jobs:
-  build-develop:
-    <<: *defaults
-    environment:
-      APP_ENVIRONMENT: development
-      APP_HOSTNAME: k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: p4-develop-k8s
-      CONTAINER_PREFIX: planet4-colombia
-      GOOGLE_PROJECT_ID: planet-4-151612
-      HELM_NAMESPACE: develop
-      TYPE: "Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_develop
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+job_descriptions:
+  build_steps: &build_steps
     steps:
       - setup_remote_docker
       - run: activate-gcloud-account.sh
@@ -33,6 +21,19 @@ jobs:
           root: /tmp/workspace
           paths:
             - var
+  deploy_steps: &deploy_steps
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - run: activate-gcloud-account.sh
+      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
+
+jobs:
+  build:
+    <<: *defaults
+    environment:
+      TYPE: "Container Build - planet4-colombia-x"
+    <<: *build_steps
 
   deploy-develop:
     <<: *defaults
@@ -47,41 +48,7 @@ jobs:
       NEWRELIC_APPNAME: P4 Colombia Development
       WP_DB_NAME: planet4-colombia_wordpress_develop
       WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run: activate-gcloud-account.sh
-      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
-
-  build-release:
-    <<: *defaults
-    environment:
-      APP_ENVIRONMENT: staging
-      APP_HOSTNAME: release.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-release
-      TYPE: "Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_release
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-release
-    steps:
-      - setup_remote_docker
-      - run: activate-gcloud-account.sh
-      - run: mkdir -p /tmp/workspace/var
-      - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
-      - run: make
-      - run:
-          name: Notify failure
-          when: on_fail
-          command: TYPE="Build" notify-job-failure.sh
-      - persist_to_workspace:
-          root: /tmp/workspace
-          paths:
-            - var
+    <<: *deploy_steps
 
   deploy-release:
     <<: *defaults
@@ -98,40 +65,7 @@ jobs:
       NEWRELIC_APPNAME: P4 Colombia Release
       WP_DB_NAME: planet4-colombia_wordpress_release
       WP_STATELESS_BUCKET: planet4-colombia-stateless-release
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run: activate-gcloud-account.sh
-      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
-
-  build-tag:
-    <<: *defaults
-    environment:
-      APP_HOSTNAME: master.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-master
-      TYPE: "Tagged Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_master
-      WP_STATELESS_BUCKET: planet4-colombia-stateless
-    steps:
-      - setup_remote_docker
-      - run: activate-gcloud-account.sh
-      - run: mkdir -p /tmp/workspace/var
-      - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
-      - run: make
-      - run:
-          name: Notify failure
-          when: on_fail
-          command: TYPE="Build" notify-job-failure.sh
-      - persist_to_workspace:
-          root: /tmp/workspace
-          paths:
-            - var
+    <<: *deploy_steps
 
   deploy-tag:
     <<: *defaults
@@ -148,62 +82,48 @@ jobs:
       NEWRELIC_APPNAME: P4 Colombia Production
       WP_DB_NAME: planet4-colombia_wordpress_master
       WP_STATELESS_BUCKET: planet4-colombia-stateless
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run: activate-gcloud-account.sh
-      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
+    <<: *deploy_steps
 
 workflows:
   version: 2
   develop:
     jobs:
-    - build-develop:
+    - build:
         context: org-global
         filters:
           branches:
             only: develop
-          tags:
-            ignore: /^v.*/
-
     - deploy-develop:
         context: org-global
         requires:
-          - build-develop
+          - build
         filters:
           branches:
             only: develop
 
   release:
     jobs:
-    - build-release:
+    - build:
         context: org-global
         filters:
           branches:
             only: /^release.*/
-          tags:
-            ignore: /^v.*/
-
     - deploy-release:
         context: org-global
         requires:
-          - build-release
+          - build
         filters:
           branches:
             only: /^release.*/
-          tags:
-            ignore: /^v.*/
-
   tag:
     jobs:
-      - build-tag:
+      - build:
           context: org-global
           filters:
             branches:
               ignore: /.*/
             tags:
               only: /^v.*/
-
       - hold-tag:
           type: approval
           filters:
@@ -212,8 +132,7 @@ workflows:
             tags:
               only: /^v.*/
           requires:
-            - build-tag
-
+            - build
       - deploy-tag:
           context: org-global
           requires:
