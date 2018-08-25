@@ -70,14 +70,20 @@ job_descriptions:
       - run: git-current-tag.sh > /tmp/workspace/var/old_release
       - run: increment-version.sh $(cat /tmp/workspace/var/old_release) > /tmp/workspace/var/new_release
       - run: release-start.sh $(cat /tmp/workspace/var/new_release)
-      - run: cat composer-local.json | jq 'del(.require)' > composer-local.json
+      - run: mv composer-local.json /tmp/workspace
+      - run: < /tmp/workspace/composer-local.json jq 'del(.require)' > composer-local.json
       - run: composer validate composer-local.json
       - run: git add .
       - run:
           name: git commit
           command: |
             git commit -m ":robot: Release $(cat /tmp/workspace/var/new_release)"
+      - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release) || exit 0
       - run: git push origin feature/$(cat /tmp/workspace/var/new_release)
+      - run:
+          name: Notify failure
+          when: on_fail
+          command: TYPE="Prepare" notify-job-failure.sh
       - persist_to_workspace:
           root: /tmp/workspace
           paths:
@@ -99,7 +105,11 @@ job_descriptions:
           at: /tmp/workspace
       - checkout
       - run: release-finish.sh $(cat /tmp/workspace/var/new_release)
-      - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release)
+      - run: git push origin --delete release/$(cat /tmp/workspace/var/new_release)
+      - run:
+          name: Notify failure
+          when: on_fail
+          command: TYPE="Promote" notify-job-failure.sh
 
   deploy_steps: &deploy_steps
     steps:
