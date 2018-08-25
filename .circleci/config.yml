@@ -241,14 +241,14 @@ workflows:
             branches:
               ignore: /.*/
             tags:
-              only: /^v.*/
+              only: /^v\p{Digit}+\.\p{Digit}+\.\p{Digit}+.*/
       - hold-tag:
           type: approval
           filters:
             branches:
               ignore: /.*/
             tags:
-              only: /^v.*/
+              only: /^v\p{Digit}+\.\p{Digit}+\.\p{Digit}+.*/
           requires:
             - build-tag
       - deploy-tag:
@@ -259,4 +259,4 @@ workflows:
             branches:
               ignore: /.*/
             tags:
-              only: /^v.*/
+              only: /^v\p{Digit}+\.\p{Digit}+\.\p{Digit}+.*/
