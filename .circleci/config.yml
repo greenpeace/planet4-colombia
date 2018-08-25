@@ -79,7 +79,7 @@ job_descriptions:
           command: |
             git commit -m ":robot: Release $(cat /tmp/workspace/var/new_release)"
       - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release) || exit 0
-      - run: git push origin release/$(cat /tmp/workspace/var/new_release)
+      - run: git push -u origin release/$(cat /tmp/workspace/var/new_release)
       - run:
           name: Notify failure
           when: on_fail
