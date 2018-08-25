@@ -70,6 +70,7 @@ job_descriptions:
       - run: git-current-tag.sh > /tmp/workspace/var/old_release
       - run: increment-version.sh $(cat /tmp/workspace/var/old_release) > /tmp/workspace/var/new_release
       - run: release-start.sh $(cat /tmp/workspace/var/new_release)
+      - run: release-start.sh $(cat /tmp/workspace/var/new_release) || git checkout feature/$(cat /tmp/workspace/var/new_release)
       - run: mv composer-local.json /tmp/workspace
       - run: < /tmp/workspace/composer-local.json jq 'del(.require)' > composer-local.json
       - run: composer validate composer-local.json
