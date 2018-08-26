@@ -104,7 +104,8 @@ job_definitions:
       - attach_workspace:
           at: /tmp/workspace
       - checkout
-      - run: release-finish.sh $(cat /tmp/workspace/var/new_release)
+      - run: increment-version.sh "$(git-current-tag.sh)" > /tmp/workspace/var/new_release
+      - run: release-finish.sh
       - run: git push origin --delete release/$(cat /tmp/workspace/var/new_release)
       - run:
           name: Notify failure
