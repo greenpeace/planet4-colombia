@@ -1,14 +1,9 @@
 {
-	"name": "planet4-colombia/planet4-colombia",
-	"version": "0.0.1",
-
-	"require": {
-		"greenpeace/planet4-child-theme" : "dev-develop",
-		"greenpeace/planet4-master-theme" : "dev-develop",
-		"greenpeace/planet4-plugin-blocks" : "dev-develop"
-	},
-
-	"scripts": {
-		"site:custom" : []
-	}
+  "name": "planet4-colombia/planet4-colombia",
+  "version": "0.0.2",
+  "description": "Greenpeace Planet4 Colombia",
+  "license": "MIT",
+  "scripts": {
+    "site:custom": []
+  }
 }

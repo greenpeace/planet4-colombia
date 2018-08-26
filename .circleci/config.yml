@@ -1,28 +1,54 @@
+version: 2
+
 defaults: &defaults
   docker:
     - image: gcr.io/planet-4-151612/p4-builder:latest
-  working_directory:  /home/circleci/
+  working_directory:  /home/circleci
 
-version: 2
+job_environments:
+  common_environment: &common_environment
+    CONTAINER_PREFIX: planet4-colombia
+    APP_HOSTPATH: colombia
+  develop_environment: &develop_environment
+    APP_ENVIRONMENT: development
+    APP_HOSTNAME: k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: p4-develop-k8s
+    GOOGLE_PROJECT_ID: planet-4-151612
+    GOOGLE_PROJECT_ID: planet-4-151612
+    HELM_NAMESPACE: develop
+    NEWRELIC_APPNAME: P4 Colombia Development
+    WP_DB_NAME: planet4-colombia_wordpress_develop
+    WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+  release_environment: &release_environment
+    APP_ENVIRONMENT: staging
+    APP_HOSTNAME: release.k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: planet4-prod
+    CONTAINER_PREFIX: planet4-colombia
+    GCLOUD_CLUSTER: planet4-production
+    GOOGLE_PROJECT_ID: planet4-production
+    HELM_RELEASE: planet4-colombia-release
+    NEWRELIC_APPNAME: P4 Colombia Release
+    WP_DB_NAME: planet4-colombia_wordpress_release
+    WP_STATELESS_BUCKET: planet4-colombia-stateless-release
+  production_environment: &production_environment
+    APP_HOSTNAME: master.k8s.p4.greenpeace.org
+    CLOUDSQL_INSTANCE: planet4-prod
+    GCLOUD_CLUSTER: planet4-production
+    GOOGLE_PROJECT_ID: planet4-production
+    HELM_NAMESPACE: colombia
+    HELM_RELEASE: planet4-colombia-master
+    MIN_REPLICA_COUNT: 2
+    NEWRELIC_APPNAME: P4 Colombia Production
+    WP_DB_NAME: planet4-colombia_wordpress_master
+    WP_STATELESS_BUCKET: planet4-colombia-stateless
 
-jobs:
-  build-develop:
-    <<: *defaults
-    environment:
-      APP_ENVIRONMENT: development
-      APP_HOSTNAME: k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: p4-develop-k8s
-      CONTAINER_PREFIX: planet4-colombia
-      GOOGLE_PROJECT_ID: planet-4-151612
-      HELM_NAMESPACE: develop
-      TYPE: "Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_develop
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+job_descriptions:
+  build_steps: &build_steps
     steps:
       - setup_remote_docker
       - run: activate-gcloud-account.sh
       - run: mkdir -p /tmp/workspace/var
+      - run: mkdir -p /tmp/workspace/src
       - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
       - run: make
       - run:
@@ -33,143 +59,140 @@ jobs:
           root: /tmp/workspace
           paths:
             - var
+            - src
 
-  deploy-develop:
-    <<: *defaults
-    environment:
-      APP_ENVIRONMENT: development
-      APP_HOSTNAME: k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: p4-develop-k8s
-      CONTAINER_PREFIX: planet4-colombia
-      GOOGLE_PROJECT_ID: planet-4-151612
-      HELM_NAMESPACE: develop
-      NEWRELIC_APPNAME: P4 Colombia Development
-      WP_DB_NAME: planet4-colombia_wordpress_develop
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-develop
+  prepare_release: &prepare_release
+    working_directory: /tmp/workspace/src
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - run: git-current-tag.sh > /tmp/workspace/var/old_release
+      - run: increment-version.sh $(cat /tmp/workspace/var/old_release) > /tmp/workspace/var/new_release
+      - run: release-start.sh $(cat /tmp/workspace/var/new_release)
+      - run: mv composer-local.json /tmp/workspace
+      - run: < /tmp/workspace/composer-local.json jq 'del(.require)' > composer-local.json
+      - run: composer validate composer-local.json
+      - run: git add .
+      - run:
+          name: git commit
+          command: |
+            git commit -m ":robot: Release $(cat /tmp/workspace/var/new_release)"
+      - run: git push origin --delete release/$(cat /tmp/workspace/var/old_release) || exit 0
+      - run: git push origin release/$(cat /tmp/workspace/var/new_release)
+      - run:
+          name: Notify failure
+          when: on_fail
+          command: TYPE="Prepare" notify-job-failure.sh
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - var
+            - src
+
+  notify_promote: &notify_promote
+    working_directory: /tmp/workspace/src
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - checkout
+      - run: TYPE="@rawalker Promote release/$(cat /tmp/workspace/var/new_release)" notify-job-hold.sh
+
+  finish_release: &finish_release
+    working_directory: /tmp/workspace/src
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - checkout
+      - run: release-finish.sh $(cat /tmp/workspace/var/new_release)
+      - run: git push origin --delete release/$(cat /tmp/workspace/var/new_release)
+      - run:
+          name: Notify failure
+          when: on_fail
+          command: TYPE="Promote" notify-job-failure.sh
+
+  deploy_steps: &deploy_steps
     steps:
       - attach_workspace:
           at: /tmp/workspace
       - run: activate-gcloud-account.sh
       - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
+
+jobs:
+  build-branch:
+    <<: *defaults
+    environment:
+      <<: *common_environment
+      <<: *develop_environment
+    <<: *build_steps
+
+  prepare-release:
+    <<: *defaults
+    <<: *prepare_release
+
+  notify-promote:
+    <<: *defaults
+    <<: *notify_promote
 
   build-release:
     <<: *defaults
     environment:
-      APP_ENVIRONMENT: staging
-      APP_HOSTNAME: release.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-release
-      TYPE: "Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_release
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-release
-    steps:
-      - setup_remote_docker
-      - run: activate-gcloud-account.sh
-      - run: mkdir -p /tmp/workspace/var
-      - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
-      - run: make
-      - run:
-          name: Notify failure
-          when: on_fail
-          command: TYPE="Build" notify-job-failure.sh
-      - persist_to_workspace:
-          root: /tmp/workspace
-          paths:
-            - var
+      <<: *common_environment
+      <<: *release_environment
+    <<: *build_steps
 
-  deploy-release:
+  finish-release:
     <<: *defaults
-    environment:
-      APP_ENVIRONMENT: staging
-      APP_HOSTNAME: release.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-release
-      NEWRELIC_APPNAME: P4 Colombia Release
-      WP_DB_NAME: planet4-colombia_wordpress_release
-      WP_STATELESS_BUCKET: planet4-colombia-stateless-release
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run: activate-gcloud-account.sh
-      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
+    <<: *finish_release
 
   build-tag:
     <<: *defaults
     environment:
-      APP_HOSTNAME: master.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-master
-      MIN_REPLICA_COUNT: 2
-      TYPE: "Tagged Container Build - planet4-colombia-x"
-      WP_DB_NAME: planet4-colombia_wordpress_master
-      WP_STATELESS_BUCKET: planet4-colombia-stateless
-    steps:
-      - setup_remote_docker
-      - run: activate-gcloud-account.sh
-      - run: mkdir -p /tmp/workspace/var
-      - run: echo "${CIRCLE_BUILD_NUM}" > /tmp/workspace/var/circle-build-num
-      - run: make
-      - run:
-          name: Notify failure
-          when: on_fail
-          command: TYPE="Build" notify-job-failure.sh
-      - persist_to_workspace:
-          root: /tmp/workspace
-          paths:
-            - var
+      <<: *common_environment
+      <<: *production_environment
+    <<: *build_steps
+
+  deploy-develop:
+    <<: *defaults
+    environment:
+      <<: *common_environment
+      <<: *develop_environment
+    <<: *deploy_steps
+
+  deploy-release:
+    <<: *defaults
+    environment:
+      <<: *common_environment
+      <<: *release_environment
+    <<: *deploy_steps
 
   deploy-tag:
     <<: *defaults
     environment:
-      APP_HOSTNAME: master.k8s.p4.greenpeace.org
-      APP_HOSTPATH: colombia
-      CLOUDSQL_INSTANCE: planet4-prod
-      CONTAINER_PREFIX: planet4-colombia
-      GCLOUD_CLUSTER: planet4-production
-      GOOGLE_PROJECT_ID: planet4-production
-      HELM_NAMESPACE: colombia
-      HELM_RELEASE: planet4-colombia-master
-      NEWRELIC_APPNAME: P4 Colombia Production
-      WP_DB_NAME: planet4-colombia_wordpress_master
-      WP_STATELESS_BUCKET: planet4-colombia-stateless
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - run: activate-gcloud-account.sh
-      - run: BUILD_TAG=build-$(cat /tmp/workspace/var/circle-build-num) make -j2 deploy
+      <<: *common_environment
+      <<: *production_environment
+    <<: *deploy_steps
 
 workflows:
   version: 2
   develop:
     jobs:
-    - build-develop:
+    - build-branch:
         context: org-global
         filters:
           branches:
             only: develop
-          tags:
-            ignore: /^v.*/
-
     - deploy-develop:
         context: org-global
         requires:
-          - build-develop
+          - build-branch
+        filters:
+          branches:
+            only: develop
+    - prepare-release:
+        context: org-global
+        requires:
+          - deploy-develop
         filters:
           branches:
             only: develop
@@ -181,9 +204,6 @@ workflows:
         filters:
           branches:
             only: /^release.*/
-          tags:
-            ignore: /^v.*/
-
     - deploy-release:
         context: org-global
         requires:
@@ -191,9 +211,28 @@ workflows:
         filters:
           branches:
             only: /^release.*/
-          tags:
-            ignore: /^v.*/
-
+    - notify-promote:
+        context: org-global
+        requires:
+          - deploy-release
+        filters:
+          branches:
+            only: /^release.*/
+    - hold-promote:
+        type: approval
+        requires:
+          - deploy-release
+        filters:
+          branches:
+            only: /^release.*/
+    - finish-release:
+        context: org-global
+        requires:
+          - hold-promote
+          - notify-promote
+        filters:
+          branches:
+            only: /^release.*/
   tag:
     jobs:
       - build-tag:
@@ -203,7 +242,6 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v.*/
-
       - hold-tag:
           type: approval
           filters:
@@ -213,7 +251,6 @@ workflows:
               only: /^v.*/
           requires:
             - build-tag
-
       - deploy-tag:
           context: org-global
           requires:
