@@ -1,6 +1,5 @@
 {
 	"name": "greenpeace/planet4-colombia",
-	"version": "1.26.0",
   "description": "Greenpeace Planet4 Colombia",
   "license": "MIT",
 	"require": {
