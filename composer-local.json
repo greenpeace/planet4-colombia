@@ -3,7 +3,8 @@
   "description": "Greenpeace Planet4 Colombia",
   "license": "MIT",
 	"require": {
-		"greenpeace/planet4-child-theme-colombia" : "0.*"
+		"greenpeace/planet4-child-theme-colombia" : "0.*",
+		"greenpeace/planet4-master-theme" : "dev-planet-4305"
 	},
 	"scripts": {
     	 "core:language": "wp language core install es_CO; wp language core activate es_CO",
