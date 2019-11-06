@@ -1,14 +1,14 @@
 {
-  "name": "greenpeace/planet4-colombia",
-  "description": "Greenpeace Planet4 Colombia",
-  "license": "MIT",
+	"name": "greenpeace/planet4-colombia",
+	"description": "Greenpeace Planet4 Colombia",
+	"license": "MIT",
 	"require": {
 		"greenpeace/planet4-child-theme-colombia" : "0.*"
 	},
 	"scripts": {
-    	 "core:language": "wp language core install es_CO; wp language core activate es_CO",
-    	 "site:custom": [
-      	  "@core:language"
-    	]
-  }
+		"core:language": "wp language core install es_CO; wp language core activate es_CO",
+		"site:custom": [
+			"@core:language"
+		]
+	}
 }
